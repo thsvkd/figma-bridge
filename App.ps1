@@ -11,6 +11,8 @@
    .\App.ps1 -Action connect         → 중계 서버 + 하네스 연결
    .\App.ps1 -Action disconnect      → 연결 해제
    .\App.ps1 -Action doctor [-Fix]   → 결정론 점검 (기본은 고침)
+   .\App.ps1 -Action install-harness [claude|codex|claude-desktop]
+                                     → AI 도구 설치 (기본 claude)
    .\App.ps1 -Action socket-start
    .\App.ps1 -Action socket-stop
    .\App.ps1 -Action ai-doctor       → 결정론이 막힌 뒤 로컬 하네스에 맡김
@@ -116,6 +118,9 @@ switch ($act) {
         foreach ($h in @($r.Harness)) {
             if ($h.Ok) { Write-FbLine ok $h.Target $h.Detail } else { Write-FbLine warn $h.Target $h.Detail }
         }
+        if ($r.HarnessMissing) {
+            Write-FbLine warn 'harness' 'Claude Code / Codex 가 없습니다. -Action install-harness 로 설치하세요.'
+        }
         if ($r.Plugin) {
             if ($r.Plugin.Ok) {
                 Write-FbLine ok 'plugin' $r.Plugin.Detail
@@ -124,6 +129,16 @@ switch ($act) {
                 Write-FbLine info 'plugin-url' $script:FbPluginUrl
             }
         }
+    }
+    'install-harness' {
+        $target = 'claude'
+        foreach ($a in @($RemainingArgs)) {
+            if ($a -and $a -notlike '-*') { $target = $a.Trim().ToLowerInvariant(); break }
+        }
+        $r = Install-FbHarness -Id $target
+        if ($r.Ok) { Write-FbLine ok $r.Id $r.Detail } else { Write-FbLine err $r.Id $r.Detail }
+        if ($r.NeedsLogin) { Write-FbLine info 'login' '설치는 끝났습니다. 로그인은 직접 하셔야 합니다.' }
+        if (-not $r.Ok) { exit 1 }
     }
     'disconnect' {
         [void](Invoke-FbDisconnect)
@@ -161,7 +176,7 @@ switch ($act) {
     }
     default {
         Write-FbLine err 'action' "모르는 동작: $Action"
-        Write-FbLine info 'hint' 'status / connect / disconnect / doctor / socket-start / socket-stop / ai-doctor'
+        Write-FbLine info 'hint' 'status / connect / disconnect / doctor / install-harness / socket-start / socket-stop / ai-doctor'
         exit 1
     }
 }

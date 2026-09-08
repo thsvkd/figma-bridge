@@ -189,9 +189,16 @@ function Test-FbFigmaRunning {
 function Get-FbClaudePath {
     $candidates = @(
         (Join-Path $env:USERPROFILE '.local\bin\claude.exe'),
-        (Join-Path $env:USERPROFILE '.local\bin\claude.cmd')
+        (Join-Path $env:USERPROFILE '.local\bin\claude.cmd'),
+        (Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Links\claude.exe')
     )
     return (Find-FbCommand -Name 'claude' -Candidates $candidates)
+}
+
+function Get-FbClaudeDesktopDir {
+    $dir = Split-Path (Get-FbClaudeDesktopConfigPath) -Parent
+    if (Test-Path -LiteralPath $dir) { return $dir }
+    return $null
 }
 
 function Get-FbCodexPath {
@@ -199,7 +206,8 @@ function Get-FbCodexPath {
         (Join-Path $env:APPDATA 'npm\codex.cmd'),
         (Join-Path $env:APPDATA 'npm\codex.ps1'),
         (Join-Path $env:LOCALAPPDATA 'Programs\OpenAI\Codex\bin\codex.exe'),
-        (Join-Path $env:USERPROFILE '.codex\packages\standalone\current\bin\codex.exe')
+        (Join-Path $env:USERPROFILE '.codex\packages\standalone\current\bin\codex.exe'),
+        (Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Links\codex.exe')
     )
     return (Find-FbCommand -Name 'codex' -Candidates $candidates)
 }
@@ -304,6 +312,24 @@ function Start-FbQuietProcess {
     if ($StdOutPath) { [IO.File]::WriteAllText($StdOutPath, $outTask.Result, $utf8) }
     if ($StdErrPath) { [IO.File]::WriteAllText($StdErrPath, $errTask.Result, $utf8) }
     return $proc
+}
+
+function Update-FbEnvPath {
+    $machine = [Environment]::GetEnvironmentVariable('Path', 'Machine')
+    $user = [Environment]::GetEnvironmentVariable('Path', 'User')
+    $env:Path = (@($machine, $user) | Where-Object { $_ }) -join ';'
+    foreach ($extra in @((Join-Path $env:USERPROFILE '.local\bin'), (Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Links'), (Join-Path $env:USERPROFILE '.bun\bin'))) {
+        if ((Test-Path -LiteralPath $extra) -and ($env:Path -notlike "*$extra*")) {
+            $env:Path = "$extra;$env:Path"
+        }
+    }
+}
+
+function Clear-FbTempFile {
+    param([string]$Path)
+    if ([string]::IsNullOrWhiteSpace($Path)) { return }
+    if (-not (Test-Path -LiteralPath $Path)) { return }
+    Remove-Item -LiteralPath $Path -Force -ErrorAction SilentlyContinue
 }
 
 function Get-FbShortcutPaths {

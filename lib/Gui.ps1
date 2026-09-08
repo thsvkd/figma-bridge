@@ -101,6 +101,138 @@ function Update-FbGuiStatus {
     return $st
 }
 
+# AI 도구 설치 창.
+# 설치는 대신 해 주지만 로그인은 사람이 해야 한다. 그 경계를 숨기지 않는다.
+function Update-FbHarnessRows {
+    $d = $script:FbHarnessDlg
+    if (-not $d) { return }
+    foreach ($row in $d.Rows) {
+        $path = Get-FbHarnessPath -Id $row.Id
+        if ($path) {
+            Set-FbStatusLabel $row.Status 'ok' '설치됨'
+            $row.Install.Enabled = $false
+            $row.Login.Enabled = $true
+        } else {
+            Set-FbStatusLabel $row.Status 'warn' '없음'
+            $row.Install.Enabled = $true
+            $row.Login.Enabled = $false
+        }
+    }
+}
+
+function Show-FbHarnessDialog {
+    param($Owner)
+
+    $dlg = New-Object System.Windows.Forms.Form
+    $dlg.Text = 'AI 도구 설치'
+    $dlg.Size = New-Object System.Drawing.Size(660, 380)
+    $dlg.StartPosition = 'CenterParent'
+    $dlg.FormBorderStyle = 'FixedDialog'
+    $dlg.MaximizeBox = $false
+    $dlg.MinimizeBox = $false
+    $dlg.Font = New-Object System.Drawing.Font('Segoe UI', 10)
+    $dlg.BackColor = [System.Drawing.Color]::FromArgb(250, 250, 248)
+
+    $intro = New-Object System.Windows.Forms.Label
+    $intro.Location = New-Object System.Drawing.Point(20, 18)
+    $intro.Size = New-Object System.Drawing.Size(610, 62)
+    $intro.ForeColor = [System.Drawing.Color]::FromArgb(70, 70, 70)
+    $intro.Text = ('피그마를 시킬 AI 가 이 PC 에 하나는 있어야 합니다. Claude Code 하나면 충분합니다.' + [Environment]::NewLine +
+        '설치는 대신 해 드립니다. 로그인은 각 서비스 계정으로 직접 하셔야 합니다.')
+    $dlg.Controls.Add($intro)
+
+    $rows = New-Object System.Collections.Generic.List[object]
+    $y = 92
+    foreach ($entry in @(Get-FbHarnessCatalog)) {
+        $name = New-Object System.Windows.Forms.Label
+        $name.Location = New-Object System.Drawing.Point(20, ($y + 4))
+        $name.Size = New-Object System.Drawing.Size(190, 24)
+        $label = $entry.Name
+        if ($entry.Recommended) { $label = "$label  (권장)" }
+        $name.Text = $label
+        $dlg.Controls.Add($name)
+
+        $status = New-Object System.Windows.Forms.Label
+        $status.Location = New-Object System.Drawing.Point(215, ($y + 4))
+        $status.Size = New-Object System.Drawing.Size(140, 24)
+        $dlg.Controls.Add($status)
+
+        $install = New-Object System.Windows.Forms.Button
+        $install.Location = New-Object System.Drawing.Point(360, $y)
+        $install.Size = New-Object System.Drawing.Size(120, 32)
+        $install.Text = '설치'
+        $install.Tag = $entry.Id
+        $dlg.Controls.Add($install)
+
+        $login = New-Object System.Windows.Forms.Button
+        $login.Location = New-Object System.Drawing.Point(490, $y)
+        $login.Size = New-Object System.Drawing.Size(120, 32)
+        $login.Text = '로그인'
+        $login.Tag = $entry.Id
+        $dlg.Controls.Add($login)
+
+        $rows.Add([pscustomobject]@{ Id = $entry.Id; Name = $entry.Name; Status = $status; Install = $install; Login = $login })
+        $y += 44
+    }
+
+    $note = New-Object System.Windows.Forms.Label
+    $note.Location = New-Object System.Drawing.Point(20, ($y + 10))
+    $note.Size = New-Object System.Drawing.Size(610, 46)
+    $note.ForeColor = [System.Drawing.Color]::FromArgb(70, 70, 70)
+    $note.Text = '설치는 winget 을 먼저 쓰고, 안 되면 공식 설치 스크립트로 물러섭니다. 몇 분 걸릴 수 있습니다.'
+    $dlg.Controls.Add($note)
+
+    $close = New-Object System.Windows.Forms.Button
+    $close.Location = New-Object System.Drawing.Point(490, ($y + 60))
+    $close.Size = New-Object System.Drawing.Size(120, 34)
+    $close.Text = '닫기'
+    $close.DialogResult = [System.Windows.Forms.DialogResult]::OK
+    $dlg.Controls.Add($close)
+    $dlg.AcceptButton = $close
+
+    $script:FbHarnessDlg = @{ Form = $dlg; Rows = $rows; Note = $note }
+
+    foreach ($row in $rows) {
+        $row.Install.Add_Click({
+                $d = $script:FbHarnessDlg
+                $g = $script:FbGui
+                $id = $this.Tag
+                $d.Note.Text = '설치 중입니다. 창이 잠깐 멈춘 것처럼 보일 수 있습니다…'
+                $d.Form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
+                [System.Windows.Forms.Application]::DoEvents()
+                try {
+                    $r = Install-FbHarness -Id $id
+                    Write-FbGuiLog $g.Log $r.Detail
+                    $d.Note.Text = $r.Detail
+                    if ($r.Ok -and $r.Method -ne 'already') {
+                        if (Test-FbPackagesPresent) {
+                            [void](Connect-FbHarnesses)
+                            Write-FbGuiLog $g.Log 'TalkToFigma 를 새로 설치한 도구에 등록했습니다.'
+                        }
+                    }
+                } catch {
+                    $d.Note.Text = '설치 실패: ' + $_.Exception.Message
+                    Write-FbGuiLog $g.Log ('설치 실패: ' + $_.Exception.Message)
+                } finally {
+                    $d.Form.Cursor = [System.Windows.Forms.Cursors]::Default
+                    Update-FbHarnessRows
+                }
+            })
+
+        $row.Login.Add_Click({
+                $d = $script:FbHarnessDlg
+                $g = $script:FbGui
+                $msg = Start-FbHarnessLogin -Id $this.Tag
+                $d.Note.Text = $msg
+                Write-FbGuiLog $g.Log $msg
+            })
+    }
+
+    Update-FbHarnessRows
+    [void]$dlg.ShowDialog($Owner)
+    [void](Update-FbGuiStatus -Ui $script:FbGui)
+}
+
 function Show-FbGui {
     Add-Type -AssemblyName System.Windows.Forms
     Add-Type -AssemblyName System.Drawing
@@ -182,6 +314,12 @@ function Show-FbGui {
     $btnAi.Size = New-Object System.Drawing.Size(190, 32)
     $btnAi.Enabled = $false
     $form.Controls.Add($btnAi)
+
+    $btnHarness = New-Object System.Windows.Forms.Button
+    $btnHarness.Text = 'AI 도구 설치'
+    $btnHarness.Location = New-Object System.Drawing.Point(544, $y)
+    $btnHarness.Size = New-Object System.Drawing.Size(190, 32)
+    $form.Controls.Add($btnHarness)
     $y += 44
 
     $hint = New-Object System.Windows.Forms.Label
@@ -253,6 +391,9 @@ function Show-FbGui {
                 foreach ($h in @($r.Harness)) {
                     $mark = $(if ($h.Ok) { 'OK' } else { '실패' })
                     Write-FbGuiLog $g.Log ("{0}: {1} — {2}" -f $mark, $h.Target, $h.Detail)
+                }
+                if ($r.HarnessMissing) {
+                    Write-FbGuiLog $g.Log '이 PC 에 Claude Code / Codex 가 없습니다. [AI 도구 설치] 를 눌러 주세요.'
                 }
                 if ($r.Plugin) {
                     $mark = $(if ($r.Plugin.Ok) { 'OK' } else { '!!' })
@@ -328,6 +469,8 @@ function Show-FbGui {
                 Write-FbGuiLog $g.Log ("AI 점검 실패: " + $_.Exception.Message)
             } finally { Set-FbGuiBusy $false }
         })
+
+    $btnHarness.Add_Click({ Show-FbHarnessDialog -Owner $script:FbGui.Form })
 
     $btnPlug.Add_Click({
             $g = $script:FbGui

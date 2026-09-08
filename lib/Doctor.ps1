@@ -118,7 +118,8 @@ function Get-FbChecks {
     $hasHarness = $claude -or $codex -or (Test-Path -LiteralPath $desktopDir)
     if (-not $hasHarness) {
         $checks += New-FbCheck -Id 'harness-any' -Label 'AI 하네스' -Status 'fail' -Text 'Claude Code / Codex 가 없습니다' `
-            -Hint '디자이너 PC 에 Claude Code 또는 Codex 를 먼저 설치하세요.'
+            -Hint '고치기를 누르면 Claude Code 를 winget 또는 공식 설치 스크립트로 설치합니다. 설치 뒤 로그인은 직접 하셔야 합니다.' `
+            -CanFix -FixId 'install-harness'
     }
 
     return @($checks)
@@ -131,6 +132,10 @@ function Invoke-FbFix {
         'install-packages' { [void](Install-FbPackages); return '패키지를 설치했습니다.' }
         'start-socket' { [void](Start-FbSocket); return '중계 서버를 켰습니다.' }
         'restart-socket' { [void](Stop-FbSocket); [void](Start-FbSocket); return '중계 서버를 다시 켰습니다.' }
+        'install-harness' {
+            $r = Install-FbHarness -Id 'claude'
+            return $r.Detail
+        }
         'start-plugin' {
             $r = Start-FbPlugin
             return $r.Detail

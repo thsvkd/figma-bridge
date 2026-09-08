@@ -19,7 +19,7 @@ function Install-FbBun {
         $args = @('install', '-e', '--id', 'Oven-sh.Bun', '--accept-package-agreements', '--accept-source-agreements', '--disable-interactivity')
         $p = Start-FbQuietProcess -FilePath $winget.Source -ArgumentList $args -Wait
         if ($p.ExitCode -eq 0) {
-            $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
+            Update-FbEnvPath
             $found = Get-FbBunPath
             if ($found) { return $found }
         }
@@ -29,9 +29,7 @@ function Install-FbBun {
     Invoke-WebRequest -UseBasicParsing -Uri 'https://bun.sh/install.ps1' -OutFile $install
     $ps = (Get-Command powershell.exe).Source
     [void](Start-FbQuietProcess -FilePath $ps -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $install) -Wait)
-    $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
-    $homeBun = Join-Path $env:USERPROFILE '.bun\bin'
-    if ($env:Path -notlike "*$homeBun*") { $env:Path = "$homeBun;$env:Path" }
+    Update-FbEnvPath
     return (Get-FbBunPath)
 }
 

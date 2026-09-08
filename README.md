@@ -9,6 +9,18 @@ Windows에서 **Talk to Figma MCP**(로컬, 무료)로 Claude Code / Codex와 �
 3. 피그마에서 디자인 파일을 하나 열어 둡니다.
 4. **연결** 을 누릅니다. 여기서 끝입니다.
 
+피그마를 시킬 AI 가 이 PC 에 하나는 있어야 합니다. 없으면 **AI 도구 설치** 를 누르세요.
+winget 으로 먼저 시도하고, 안 되면 공식 설치 스크립트로 물러섭니다. 관리자 권한은 필요 없습니다.
+
+| | winget 장치 ID | 설치 안 될 때 |
+|---|---|---|
+| Claude Code (권장) | `Anthropic.ClaudeCode` | https://docs.claude.com/en/docs/claude-code/setup |
+| Codex CLI | `OpenAI.Codex` | https://developers.openai.com/codex/cli |
+| Claude Desktop | `Anthropic.Claude` | https://claude.ai/download |
+
+**로그인은 대신 해 드릴 수 없습니다.** 설치가 끝나면 같은 창의 **로그인** 버튼이 터미널을 열어 주고,
+거기서 각자 계정으로 로그인하시면 됩니다. 이 터미널만은 일부러 보이게 띄웁니다.
+
 **연결** 버튼 하나가 이만큼을 합니다.
 
 - Bun · Talk to Figma MCP 고정 버전 준비
