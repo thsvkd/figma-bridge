@@ -3,7 +3,6 @@
   "private": true,
   "description": "Pinned Talk to Figma MCP runtime for the designer connector",
   "dependencies": {
-    "cursor-talk-to-figma-mcp": "0.3.5",
-    "cursor-talk-to-figma-socket": "0.3.5"
+    "cursor-talk-to-figma-mcp": "0.3.5"
   }
 }

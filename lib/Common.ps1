@@ -14,6 +14,7 @@ $script:FbMcpPkg = 'cursor-talk-to-figma-mcp'
 $script:FbSocketPkg = 'cursor-talk-to-figma-socket'
 $script:FbPluginUrl = 'https://www.figma.com/community/plugin/1485687494525374295/talk-to-figma-mcp-plugin'
 $script:FbChannelHint = 'figma'
+$script:FbPluginName = 'Talk To Figma MCP Plugin'
 $script:FbMarkerBegin = '# >>> figma-bridge TalkToFigma >>>'
 $script:FbMarkerEnd = '# <<< figma-bridge TalkToFigma <<<'
 
@@ -240,6 +241,68 @@ function Get-FbMcpServerJs {
 
 function Get-FbSocketJs {
     return (Join-Path $script:FbHome "node_modules\$($script:FbSocketPkg)\dist\socket.js")
+}
+
+function Get-FbRelayJs {
+    return (Join-Path $script:FbCodeRoot 'lib\relay.js')
+}
+
+# 릴레이가 우리 것이면 /status 가 JSON 을 준다. 아니면 $null 이다.
+function Get-FbRelayStatus {
+    $raw = Get-FbHttpText -Url ("http://127.0.0.1:{0}/status" -f $script:FbPort)
+    if ([string]::IsNullOrWhiteSpace($raw)) { return $null }
+    try { $obj = $raw | ConvertFrom-Json } catch { return $null }
+    if ($obj.relay -ne 'figma-bridge') { return $null }
+    return $obj
+}
+
+function Format-FbArgument {
+    param([string]$Value)
+    if ($Value -match '[\s"]') { return '"' + ($Value -replace '"', '\"') + '"' }
+    return $Value
+}
+
+# 콘솔 창을 아예 만들지 않고 프로세스를 실행한다.
+# Start-Process 는 -WindowStyle Hidden 이어도 콘솔 창을 할당해 깜빡일 수 있다.
+function Start-FbQuietProcess {
+    param(
+        [Parameter(Mandatory = $true)][string]$FilePath,
+        [string[]]$ArgumentList = @(),
+        [string]$WorkingDirectory,
+        [hashtable]$Environment,
+        [string]$StdOutPath,
+        [string]$StdErrPath,
+        [switch]$Wait
+    )
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = $FilePath
+    $psi.Arguments = (@($ArgumentList) | ForEach-Object { Format-FbArgument -Value $_ }) -join ' '
+    if ($WorkingDirectory) { $psi.WorkingDirectory = $WorkingDirectory }
+    $psi.UseShellExecute = $false
+    $psi.CreateNoWindow = $true
+    $psi.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Hidden
+    if ($Environment) {
+        foreach ($k in $Environment.Keys) { $psi.EnvironmentVariables[$k] = [string]$Environment[$k] }
+    }
+
+    # 파이프는 기다리는 호출에서만 쓴다. 백그라운드 프로세스는 자기 로그를 직접 쓴다.
+    $capture = [bool]($Wait -and ($StdOutPath -or $StdErrPath))
+    $psi.RedirectStandardOutput = $capture
+    $psi.RedirectStandardError = $capture
+
+    $proc = [System.Diagnostics.Process]::Start($psi)
+    if (-not $capture) {
+        if ($Wait) { $proc.WaitForExit() }
+        return $proc
+    }
+
+    $outTask = $proc.StandardOutput.ReadToEndAsync()
+    $errTask = $proc.StandardError.ReadToEndAsync()
+    $proc.WaitForExit()
+    $utf8 = New-Object System.Text.UTF8Encoding $false
+    if ($StdOutPath) { [IO.File]::WriteAllText($StdOutPath, $outTask.Result, $utf8) }
+    if ($StdErrPath) { [IO.File]::WriteAllText($StdErrPath, $errTask.Result, $utf8) }
+    return $proc
 }
 
 function Get-FbShortcutPaths {

@@ -3,8 +3,9 @@
 
 . (Join-Path $PSScriptRoot 'Common.ps1')
 
+# 중계 서버는 우리 릴레이(lib/relay.js)가 맡는다. 패키지는 MCP 서버만 필요하다.
 function Test-FbPackagesPresent {
-    return (Test-Path -LiteralPath (Get-FbMcpServerJs)) -and (Test-Path -LiteralPath (Get-FbSocketJs))
+    return (Test-Path -LiteralPath (Get-FbMcpServerJs))
 }
 
 function Install-FbBun {
@@ -16,7 +17,7 @@ function Install-FbBun {
     $winget = Get-Command winget.exe -ErrorAction SilentlyContinue
     if ($winget) {
         $args = @('install', '-e', '--id', 'Oven-sh.Bun', '--accept-package-agreements', '--accept-source-agreements', '--disable-interactivity')
-        $p = Start-Process -FilePath $winget.Source -ArgumentList $args -Wait -PassThru -WindowStyle Hidden
+        $p = Start-FbQuietProcess -FilePath $winget.Source -ArgumentList $args -Wait
         if ($p.ExitCode -eq 0) {
             $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
             $found = Get-FbBunPath
@@ -26,7 +27,8 @@ function Install-FbBun {
 
     $install = Join-Path $env:TEMP 'bun-install.ps1'
     Invoke-WebRequest -UseBasicParsing -Uri 'https://bun.sh/install.ps1' -OutFile $install
-    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $install
+    $ps = (Get-Command powershell.exe).Source
+    [void](Start-FbQuietProcess -FilePath $ps -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $install) -Wait)
     $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
     $homeBun = Join-Path $env:USERPROFILE '.bun\bin'
     if ($env:Path -notlike "*$homeBun*") { $env:Path = "$homeBun;$env:Path" }
@@ -53,8 +55,8 @@ function Install-FbPackages {
     Initialize-FbHome
     $outLog = Join-Path (Get-FbLogDir) 'bun-install.out.log'
     $errLog = Join-Path (Get-FbLogDir) 'bun-install.err.log'
-    $p = Start-Process -FilePath $bun -ArgumentList @('install') -WorkingDirectory (Get-FbHome) `
-        -Wait -PassThru -WindowStyle Hidden -RedirectStandardOutput $outLog -RedirectStandardError $errLog
+    $p = Start-FbQuietProcess -FilePath $bun -ArgumentList @('install') -WorkingDirectory (Get-FbHome) `
+        -StdOutPath $outLog -StdErrPath $errLog -Wait
     if ($p.ExitCode -ne 0) {
         $tail = ''
         if (Test-Path -LiteralPath $errLog) { $tail = [IO.File]::ReadAllText($errLog) }

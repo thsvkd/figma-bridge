@@ -48,7 +48,7 @@ foreach ($a in @($RemainingArgs)) { if (Test-FbHelpToken $a) { Show-FbHelp; retu
 
 function Get-FbCopyNames {
     return @(
-        'App.ps1', 'App.cmd', 'Install.ps1', 'Setup.cmd', 'Uninstall.cmd',
+        'App.ps1', 'App.cmd', 'App.vbs', 'Install.ps1', 'Setup.cmd', 'Uninstall.cmd',
         'package.json'
     )
 }
@@ -81,10 +81,11 @@ function Copy-FbTree {
 }
 
 function Install-FbShortcut {
-    param([string]$LinkPath, [string]$Target, [string]$WorkDir)
+    param([string]$LinkPath, [string]$Target, [string]$WorkDir, [string]$Arguments = '')
     $w = New-Object -ComObject WScript.Shell
     $s = $w.CreateShortcut($LinkPath)
     $s.TargetPath = $Target
+    $s.Arguments = $Arguments
     $s.WorkingDirectory = $WorkDir
     $s.WindowStyle = 1
     $s.Description = $script:FbProductName
@@ -95,7 +96,7 @@ function Install-FbShortcut {
 
 if ($Status) {
     $home = Get-FbHome
-    $app = Join-Path $home 'App.cmd'
+    $app = Join-Path $home 'App.vbs'
     if (Test-Path -LiteralPath $app) {
         Write-FbLine ok 'installed' $home
     } else {
@@ -151,7 +152,10 @@ foreach ($sc in @(Get-FbShortcutPaths)) {
     if (-not (Test-Path -LiteralPath $dir)) {
         New-Item -ItemType Directory -Path $dir -Force | Out-Null
     }
-    Install-FbShortcut -LinkPath $sc.Path -Target (Join-Path $dst 'App.cmd') -WorkDir $dst
+    # 콘솔 창이 뜨지 않도록 wscript 로 App.vbs 를 띄운다.
+    $wscript = Join-Path $env:WINDIR 'System32\wscript.exe'
+    Install-FbShortcut -LinkPath $sc.Path -Target $wscript -WorkDir $dst `
+        -Arguments ('"' + (Join-Path $dst 'App.vbs') + '"')
     Write-FbLine ok 'shortcut' $sc.Path
 }
 
@@ -175,8 +179,9 @@ try {
 Write-FbLine ok 'done' '설치했습니다. 바탕화면의 "피그마 연결" 을 더블클릭하면 됩니다.'
 
 if (-not $NoLaunch) {
-    $appCmd = Join-Path $dst 'App.cmd'
-    if (Test-Path -LiteralPath $appCmd) {
-        Start-Process -FilePath $appCmd
+    $appVbs = Join-Path $dst 'App.vbs'
+    if (Test-Path -LiteralPath $appVbs) {
+        $wscript = Join-Path $env:WINDIR 'System32\wscript.exe'
+        [void](Start-FbQuietProcess -FilePath $wscript -ArgumentList @($appVbs) -WorkingDirectory $dst)
     }
 }

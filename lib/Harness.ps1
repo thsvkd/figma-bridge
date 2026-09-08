@@ -82,8 +82,8 @@ function Invoke-FbNative {
     $out = Join-Path $env:TEMP ('fb-out-{0}.txt' -f [guid]::NewGuid().ToString('N'))
     $err = Join-Path $env:TEMP ('fb-err-{0}.txt' -f [guid]::NewGuid().ToString('N'))
     try {
-        $p = Start-Process -FilePath $FilePath -ArgumentList $ArgumentList -Wait -PassThru -WindowStyle Hidden `
-            -RedirectStandardOutput $out -RedirectStandardError $err
+        $p = Start-FbQuietProcess -FilePath $FilePath -ArgumentList $ArgumentList -Wait `
+            -StdOutPath $out -StdErrPath $err
         $stdout = ''
         $stderr = ''
         if (Test-Path -LiteralPath $out) { $stdout = [IO.File]::ReadAllText($out) }

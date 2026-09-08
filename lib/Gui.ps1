@@ -47,12 +47,22 @@ function Update-FbGuiStatus {
     if ($st.Bun) { Set-FbStatusLabel $Ui.Bun 'ok' $st.Bun } else { Set-FbStatusLabel $Ui.Bun 'fail' '없음 — 연결 시 설치합니다' }
     if ($st.Packages) { Set-FbStatusLabel $Ui.Pkg 'ok' '고정 버전 준비됨' } else { Set-FbStatusLabel $Ui.Pkg 'warn' '아직 받지 않음' }
 
-    if ($st.Socket.HttpOk) {
+    if ($st.Socket.HttpOk -and $st.Socket.IsOurs) {
         Set-FbStatusLabel $Ui.Sock 'ok' '127.0.0.1:3055 실행 중'
+    } elseif ($st.Socket.HttpOk) {
+        Set-FbStatusLabel $Ui.Sock 'warn' '다른 중계 서버가 3055 를 쓰는 중 — [연결] 이 바꿔 답니다'
     } elseif ($st.Socket.Running) {
         Set-FbStatusLabel $Ui.Sock 'warn' '프로세스는 있으나 응답 없음'
     } else {
         Set-FbStatusLabel $Ui.Sock 'fail' '꺼짐'
+    }
+
+    if ($st.PluginOn) {
+        Set-FbStatusLabel $Ui.Plugin 'ok' '연결됨 — AI에게 바로 시키면 됩니다'
+    } elseif ($st.Socket.IsOurs) {
+        Set-FbStatusLabel $Ui.Plugin 'warn' '아직 안 붙음 — [연결] 이 대신 켭니다'
+    } else {
+        Set-FbStatusLabel $Ui.Plugin 'fail' '중계 서버부터 켜야 합니다'
     }
 
     if ($st.FigmaPath -and $st.FigmaRunning) {
@@ -99,9 +109,9 @@ function Show-FbGui {
 
     $form = New-Object System.Windows.Forms.Form
     $form.Text = $script:FbProductName
-    $form.Size = New-Object System.Drawing.Size(780, 700)
+    $form.Size = New-Object System.Drawing.Size(780, 730)
     $form.StartPosition = 'CenterScreen'
-    $form.MinimumSize = New-Object System.Drawing.Size(720, 640)
+    $form.MinimumSize = New-Object System.Drawing.Size(720, 670)
     $form.Font = New-Object System.Drawing.Font('Segoe UI', 10)
     $form.BackColor = [System.Drawing.Color]::FromArgb(250, 250, 248)
 
@@ -124,6 +134,7 @@ function Show-FbGui {
     $pkgLbl = Add-FbStatusRow -Parent $form -Top $y -Name 'Talk to Figma' -Tag 'pkg'; $y += 26
     $sockLbl = Add-FbStatusRow -Parent $form -Top $y -Name '중계 서버' -Tag 'sock'; $y += 26
     $figLbl = Add-FbStatusRow -Parent $form -Top $y -Name '피그마 앱' -Tag 'figma'; $y += 26
+    $plugLbl = Add-FbStatusRow -Parent $form -Top $y -Name '피그마 플러그인' -Tag 'plugin'; $y += 26
     $clLbl = Add-FbStatusRow -Parent $form -Top $y -Name 'Claude Code' -Tag 'claude'; $y += 26
     $cdLbl = Add-FbStatusRow -Parent $form -Top $y -Name 'Claude Desktop' -Tag 'desktop'; $y += 26
     $cxLbl = Add-FbStatusRow -Parent $form -Top $y -Name 'Codex' -Tag 'codex'; $y += 36
@@ -177,7 +188,7 @@ function Show-FbGui {
     $hint.Location = New-Object System.Drawing.Point(24, $y)
     $hint.Size = New-Object System.Drawing.Size(720, 40)
     $hint.ForeColor = [System.Drawing.Color]::FromArgb(70, 70, 70)
-    $hint.Text = "연결 후 피그마에서 플러그인을 실행하고 채널 이름 '$($script:FbChannelHint)' 로 Join 하세요. 플러그인 실행은 자동으로 할 수 없습니다."
+    $hint.Text = '연결을 누르면 중계 서버 · AI 설정 · 피그마 플러그인까지 한 번에 준비합니다. 채널 이름은 맞출 필요가 없습니다.'
     $form.Controls.Add($hint)
     $y += 44
 
@@ -198,6 +209,7 @@ function Show-FbGui {
         Pkg        = $pkgLbl
         Sock       = $sockLbl
         Figma      = $figLbl
+        Plugin     = $plugLbl
         Claude     = $clLbl
         Desktop    = $cdLbl
         Codex      = $cxLbl
@@ -242,7 +254,13 @@ function Show-FbGui {
                     $mark = $(if ($h.Ok) { 'OK' } else { '실패' })
                     Write-FbGuiLog $g.Log ("{0}: {1} — {2}" -f $mark, $h.Target, $h.Detail)
                 }
-                Write-FbGuiLog $g.Log "이제 피그마에서 플러그인을 실행하고 채널 '$($script:FbChannelHint)' 로 Join 하세요."
+                if ($r.Plugin) {
+                    $mark = $(if ($r.Plugin.Ok) { 'OK' } else { '!!' })
+                    Write-FbGuiLog $g.Log ("{0}: 피그마 플러그인 — {1}" -f $mark, $r.Plugin.Detail)
+                }
+                if ($r.Plugin -and $r.Plugin.Ok) {
+                    Write-FbGuiLog $g.Log '준비 끝. AI에게 "피그마 보여?" 라고 물어보세요.'
+                }
                 [void](Update-FbGuiStatus -Ui $g)
             } catch {
                 Write-FbGuiLog $g.Log ("연결 실패: " + $_.Exception.Message)
@@ -311,10 +329,17 @@ function Show-FbGui {
             } finally { Set-FbGuiBusy $false }
         })
 
-    $btnPlug.Add_Click({ Start-Process $script:FbPluginUrl })
+    $btnPlug.Add_Click({
+            $g = $script:FbGui
+            if (Open-FbPluginPage) {
+                Write-FbGuiLog $g.Log '피그마 앱에서 플러그인 설치 페이지를 열었습니다. Run 을 한 번 누르면 설치됩니다.'
+            } else {
+                Start-Process $script:FbPluginUrl
+            }
+        })
     $btnFigma.Add_Click({
             $p = Get-FbFigmaPath
-            if ($p) { Start-Process -FilePath $p | Out-Null } else { Start-Process 'https://www.figma.com/downloads/' }
+            if ($p) { [void](Start-FbQuietProcess -FilePath $p) } else { Start-Process 'https://www.figma.com/downloads/' }
         })
 
     $form.Add_Shown({

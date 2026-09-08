@@ -44,10 +44,13 @@ function Get-FbChecks {
     }
 
     $sock = Get-FbSocketStatus
-    if ($sock.HttpOk) {
+    if ($sock.HttpOk -and $sock.IsOurs) {
         $text = '127.0.0.1:3055 응답'
         if ($sock.Pid) { $text = "$text (PID $($sock.Pid))" }
         $checks += New-FbCheck -Id 'socket' -Label '중계 서버' -Status 'ok' -Text $text
+    } elseif ($sock.HttpOk) {
+        $checks += New-FbCheck -Id 'socket' -Label '중계 서버' -Status 'warn' -Text '다른 중계 서버가 3055 를 쓰는 중입니다' `
+            -Hint '우리 릴레이라야 채널을 맞출 필요가 없습니다.' -CanFix -FixId 'restart-socket'
     } elseif ($sock.PortOpen) {
         $checks += New-FbCheck -Id 'socket' -Label '중계 서버' -Status 'warn' -Text '포트는 열려 있으나 HTTP 응답이 아닙니다' `
             -Hint '다른 프로그램이 3055 를 쓰는 중일 수 있습니다.' -CanFix -FixId 'restart-socket'
@@ -69,11 +72,12 @@ function Get-FbChecks {
             -Hint 'https://www.figma.com/downloads/ 에서 데스크톱 앱을 설치하세요.'
     }
 
-    if ($sock.HttpOk -and $sock.PluginSeen) {
-        $checks += New-FbCheck -Id 'plugin' -Label '피그마 플러그인' -Status 'ok' -Text '최근 로그에 채널 참가가 있습니다'
+    if ($sock.PluginConnected) {
+        $checks += New-FbCheck -Id 'plugin' -Label '피그마 플러그인' -Status 'ok' -Text '중계 서버에 붙어 있습니다'
     } else {
-        $hint = "피그마 → Plugins → Talk to Figma MCP Plugin → Connect 후 채널 이름 '$($script:FbChannelHint)' 로 Join"
-        $checks += New-FbCheck -Id 'plugin' -Label '피그마 플러그인' -Status 'warn' -Text '자동으로 켤 수 없음' -Hint $hint
+        $hint = '피그마에서 디자인 파일을 연 상태여야 합니다. 고치기를 누르면 창을 앞으로 꺼내 플러그인을 대신 켭니다.'
+        $checks += New-FbCheck -Id 'plugin' -Label '피그마 플러그인' -Status 'warn' -Text '아직 안 붙음' `
+            -Hint $hint -CanFix -FixId 'start-plugin'
     }
 
     $claude = Get-FbClaudePath
@@ -127,9 +131,13 @@ function Invoke-FbFix {
         'install-packages' { [void](Install-FbPackages); return '패키지를 설치했습니다.' }
         'start-socket' { [void](Start-FbSocket); return '중계 서버를 켰습니다.' }
         'restart-socket' { [void](Stop-FbSocket); [void](Start-FbSocket); return '중계 서버를 다시 켰습니다.' }
+        'start-plugin' {
+            $r = Start-FbPlugin
+            return $r.Detail
+        }
         'start-figma' {
             $p = Get-FbFigmaPath
-            if ($p) { Start-Process -FilePath $p | Out-Null; return '피그마를 실행했습니다.' }
+            if ($p) { [void](Start-FbQuietProcess -FilePath $p); return '피그마를 실행했습니다.' }
             return '피그마 경로를 찾지 못했습니다.'
         }
         'connect-harness' {
@@ -211,6 +219,9 @@ function New-FbDoctorBundle {
             socketHttp   = $status.Socket.HttpOk
             socketPid    = $status.Socket.Pid
             figmaRunning = $status.FigmaRunning
+            relayOk      = $status.RelayOk
+            pluginOn     = $status.PluginOn
+            channels     = @($status.Channels)
             claudeMcp    = $status.ClaudeMcp
             desktopMcp   = $status.DesktopMcp
             codexMcp     = $status.CodexMcp
@@ -278,8 +289,8 @@ function Invoke-FbAiDoctor {
         }
     }
 
-    $p = Start-Process -FilePath $file -ArgumentList $args -WorkingDirectory (Get-FbHome) `
-        -Wait -PassThru -WindowStyle Hidden -RedirectStandardOutput $outLog -RedirectStandardError $errLog
+    $p = Start-FbQuietProcess -FilePath $file -ArgumentList $args -WorkingDirectory (Get-FbHome) `
+        -StdOutPath $outLog -StdErrPath $errLog -Wait
 
     $outText = ''
     $errText = ''

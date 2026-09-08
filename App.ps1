@@ -67,7 +67,10 @@ function Write-FbStatusCli {
     Write-FbLine info 'home' (Get-FbHome)
     if ($Status.Bun) { Write-FbLine ok 'bun' $Status.Bun } else { Write-FbLine err 'bun' '없음' }
     if ($Status.Packages) { Write-FbLine ok 'packages' '준비됨' } else { Write-FbLine warn 'packages' '없음' }
-    if ($Status.Socket.HttpOk) { Write-FbLine ok 'socket' '3055 응답' } else { Write-FbLine err 'socket' '꺼짐' }
+    if ($Status.Socket.HttpOk -and $Status.RelayOk) { Write-FbLine ok 'socket' '3055 응답' }
+    elseif ($Status.Socket.HttpOk) { Write-FbLine warn 'socket' '3055 를 다른 서버가 쓰는 중' }
+    else { Write-FbLine err 'socket' '꺼짐' }
+    if ($Status.PluginOn) { Write-FbLine ok 'plugin' '피그마 플러그인 연결됨' } else { Write-FbLine warn 'plugin' '피그마 플러그인 미연결' }
     if ($Status.FigmaRunning) { Write-FbLine ok 'figma' '실행 중' } elseif ($Status.FigmaPath) { Write-FbLine warn 'figma' '꺼짐' } else { Write-FbLine err 'figma' '미설치' }
     if ($Status.ClaudeMcp) { Write-FbLine ok 'claude' 'TalkToFigma' } elseif ($Status.ClaudePath) { Write-FbLine warn 'claude' '미연결' } else { Write-FbLine info 'claude' '미설치' }
     if ($Status.DesktopMcp) { Write-FbLine ok 'claude-desktop' 'TalkToFigma' } else { Write-FbLine info 'claude-desktop' '미연결' }
@@ -93,7 +96,8 @@ if ([string]::IsNullOrWhiteSpace($Action)) {
     $sta = [System.Threading.Thread]::CurrentThread.GetApartmentState()
     if ($sta -ne 'STA') {
         $ps = (Get-Command powershell.exe).Source
-        $p = Start-Process -FilePath $ps -ArgumentList @('-NoProfile', '-STA', '-ExecutionPolicy', 'Bypass', '-File', $PSCommandPath) -Wait -PassThru
+        $p = Start-FbQuietProcess -FilePath $ps `
+            -ArgumentList @('-NoProfile', '-STA', '-ExecutionPolicy', 'Bypass', '-File', $PSCommandPath) -Wait
         exit $p.ExitCode
     }
     . (Join-Path $lib 'Gui.ps1')
@@ -112,8 +116,14 @@ switch ($act) {
         foreach ($h in @($r.Harness)) {
             if ($h.Ok) { Write-FbLine ok $h.Target $h.Detail } else { Write-FbLine warn $h.Target $h.Detail }
         }
-        Write-FbLine info 'plugin' "피그마에서 플러그인을 실행하고 채널 '$($script:FbChannelHint)' 로 Join 하세요."
-        Write-FbLine info 'plugin-url' $script:FbPluginUrl
+        if ($r.Plugin) {
+            if ($r.Plugin.Ok) {
+                Write-FbLine ok 'plugin' $r.Plugin.Detail
+            } else {
+                Write-FbLine warn 'plugin' $r.Plugin.Detail
+                Write-FbLine info 'plugin-url' $script:FbPluginUrl
+            }
+        }
     }
     'disconnect' {
         [void](Invoke-FbDisconnect)

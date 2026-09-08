@@ -5,13 +5,14 @@
 . (Join-Path $PSScriptRoot 'Runtime.ps1')
 . (Join-Path $PSScriptRoot 'Socket.ps1')
 . (Join-Path $PSScriptRoot 'Harness.ps1')
+. (Join-Path $PSScriptRoot 'Plugin.ps1')
 
 function Invoke-FbConnect {
     param([switch]$DryRun)
     $notes = New-Object System.Collections.Generic.List[string]
     if ($DryRun) {
         $notes.Add('Bun · 패키지 · 중계 서버 · 하네스 설정을 손볼 수 있습니다.')
-        return [pscustomobject]@{ Ok = $true; Notes = $notes; Harness = @() }
+        return [pscustomobject]@{ Ok = $true; Notes = $notes; Harness = @(); Plugin = $null }
     }
 
     if (-not (Get-FbBunPath)) {
@@ -31,18 +32,17 @@ function Invoke-FbConnect {
     }
     $notes.Add('중계 서버(3055) 실행 중')
 
-    $figma = Get-FbFigmaPath
-    if ($figma -and -not (Test-FbFigmaRunning)) {
-        Start-Process -FilePath $figma | Out-Null
-        $notes.Add('피그마 앱을 실행했습니다.')
-    }
-
     $harness = @(Connect-FbHarnesses)
     $okAny = @($harness | Where-Object { $_.Ok }).Count -gt 0
     if (-not $okAny) {
         throw '연결할 하네스(Claude Code / Codex)가 없습니다. 먼저 설치하세요.'
     }
-    return [pscustomobject]@{ Ok = $true; Notes = $notes; Harness = $harness }
+
+    # 피그마 앱 실행과 플러그인 실행까지 연결 버튼이 책임진다.
+    $plugin = Start-FbPlugin
+    if ($plugin.Ok) { $notes.Add($plugin.Detail) }
+
+    return [pscustomobject]@{ Ok = $true; Notes = $notes; Harness = $harness; Plugin = $plugin }
 }
 
 function Invoke-FbDisconnect {
@@ -89,7 +89,11 @@ function Get-FbOverallStatus {
         CodexPath    = $codex
         CodexMcp     = $codexMcp
         Connected    = $connected
+        RelayOk      = [bool]$sock.IsOurs
+        PluginOn     = [bool]$sock.PluginConnected
+        Channels     = @($sock.Channels)
         PluginUrl    = $script:FbPluginUrl
+        PluginName   = $script:FbPluginName
         ChannelHint  = $script:FbChannelHint
     }
 }

@@ -12,13 +12,22 @@ if ($redacted -match 'abcdef') {
     Add-WmResult 'DoctorSecret' 'bearer' 'PASS'
 }
 
-$c = New-FbCheck -Id 'plugin' -Label '피그마 플러그인' -Status 'warn' -Text '자동으로 켤 수 없음' -Hint 'Join'
-if ($c.CanFix) {
-    Add-WmResult 'DoctorCheck' 'plugin-nofix' 'FAIL' '플러그인 체크는 CanFix 이면 안 됩니다'
+# 플러그인은 이제 점검이 대신 켠다. 체크는 고칠 수 있어야 한다.
+$c = New-FbCheck -Id 'plugin' -Label '피그마 플러그인' -Status 'warn' -Text '아직 안 붙음' -Hint '대신 켭니다' -CanFix -FixId 'start-plugin'
+if (-not $c.CanFix -or $c.FixId -ne 'start-plugin') {
+    Add-WmResult 'DoctorCheck' 'plugin-fixable' 'FAIL' '플러그인 체크가 고칠 수 없는 상태입니다'
 } elseif ($c.Id -ne 'plugin' -or $c.Status -ne 'warn') {
     Add-WmResult 'DoctorCheck' 'shape' 'FAIL' '체크 객체 모양이 틀립니다'
 } else {
-    Add-WmResult 'DoctorCheck' 'plugin-nofix' 'PASS'
+    Add-WmResult 'DoctorCheck' 'plugin-fixable' 'PASS'
+}
+
+# 그리고 doctor 에 그 고침 분기가 실제로 있어야 한다.
+$doctorSrc = [IO.File]::ReadAllText((Join-Path $here 'lib\Doctor.ps1'))
+if ($doctorSrc -match "'start-plugin'\s*\{") {
+    Add-WmResult 'DoctorCheck' 'start-plugin-fix' 'PASS'
+} else {
+    Add-WmResult 'DoctorCheck' 'start-plugin-fix' 'FAIL' 'Invoke-FbFix 에 start-plugin 분기가 없습니다'
 }
 
 $prompt = Join-Path $here 'prompts\ai-doctor.md'
