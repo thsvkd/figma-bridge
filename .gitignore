@@ -1,0 +1,7 @@
+node_modules/
+logs/
+backups/
+state.json
+socket.pid
+*.log
+.omc/
