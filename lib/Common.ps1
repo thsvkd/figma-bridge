@@ -198,7 +198,8 @@ function Get-FbCodexPath {
     $candidates = @(
         (Join-Path $env:APPDATA 'npm\codex.cmd'),
         (Join-Path $env:APPDATA 'npm\codex.ps1'),
-        (Join-Path $env:LOCALAPPDATA 'OpenAI\Codex\codex.exe')
+        (Join-Path $env:LOCALAPPDATA 'Programs\OpenAI\Codex\bin\codex.exe'),
+        (Join-Path $env:USERPROFILE '.codex\packages\standalone\current\bin\codex.exe')
     )
     return (Find-FbCommand -Name 'codex' -Candidates $candidates)
 }
