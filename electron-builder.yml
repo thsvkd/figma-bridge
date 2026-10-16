@@ -1,0 +1,37 @@
+appId: com.figma-bridge.app
+productName: 피그마 연결
+publish:
+  provider: github
+  owner: thsvkd
+  repo: figma-bridge
+directories:
+  buildResources: build
+# Allow list: only the bundles, the resources and package.json go into the asar.
+# Production dependencies are added by electron-builder from package.json.
+files:
+  - out/**
+  - resources/**
+  - package.json
+asarUnpack:
+  - resources/**
+  # The MCP server runs as `ELECTRON_RUN_AS_NODE=1 <app exe> <server.js>` from a real path and imports its
+  # dependencies (@modelcontextprotocol/sdk, zod, ws, uuid, express...) by plain Node resolution, which does
+  # not look inside app.asar from app.asar.unpacked. Native koffi sits in the @koromix/koffi-* packages.
+  # So every production dependency is unpacked; the asar keeps only the bundles.
+  - '**/node_modules/**/*'
+win:
+  # ASCII name: the MCP entries written into Claude/Codex configs point at this exe.
+  executableName: figma-bridge
+  target:
+    - target: nsis
+      arch:
+        - x64
+nsis:
+  oneClick: true
+  perMachine: false
+  allowElevation: false
+  artifactName: ${name}-${version}-setup.${ext}
+  createDesktopShortcut: always
+  differentialPackage: true
+  include: build/installer.nsh
+npmRebuild: false
