@@ -84,3 +84,78 @@ export const bridgeMessages = {
   attachFailed: (detail: string) => `플러그인을 연결하는 중 오류가 났습니다: ${detail}`,
   actionFailed: (detail: string) => `작업 중 오류가 났습니다: ${detail}`,
 }
+
+export const viewMessages = {
+  offHeadline: '꺼져 있습니다',
+  offDetail: '연동을 누르면 중계 서버를 켜고 피그마 플러그인을 연결합니다.',
+  relayOnlyHeadline: '중계는 켜졌지만 아직 연결되지 않았습니다',
+  relayOnlyDetail: '피그마에서 디자인 파일을 연 상태로 아래 버튼을 눌러 플러그인을 연결하세요.',
+  relayOnlyFigmaStopped: '피그마가 실행 중이 아닙니다. 아래 버튼을 누르면 피그마를 켜고 플러그인을 연결합니다.',
+  relayOnlyFigmaMissing: '피그마 데스크톱 앱이 설치되어 있지 않습니다. figma.com/downloads 에서 설치해 주세요.',
+  connectedHeadline: '연결됨',
+  connectedDetail: '피그마와 AI 도구가 연결되어 있습니다.',
+  turnOn: '연동',
+  turnOff: '끄기',
+  attachPlugin: '플러그인 연결',
+  turningOn: '연동 중…',
+  turningOff: '끄는 중…',
+  attaching: '연결 중…',
+}
+
+export const trayMessages = {
+  tooltip: {
+    off: '피그마 연결: 꺼짐',
+    'relay-only': '피그마 연결: 플러그인 미연결',
+    connected: '피그마 연결: 연결됨',
+  },
+  statusLine: {
+    off: '꺼짐',
+    'relay-only': '중계 켜짐 · 플러그인 미연결',
+    connected: '연결됨',
+  },
+  turnOn: '켜기',
+  turnOff: '끄기',
+  attachPlugin: '플러그인 연결',
+  open: '창 열기',
+  quit: '종료',
+}
+
+export const appMessages = {
+  windowTitle: '피그마 연결',
+  updateAvailable: (version: string) => `새 버전 ${version}이 있습니다.`,
+  updateDownloading: (progress: number) => `새 버전을 내려받는 중입니다 (${Math.round(progress)}%).`,
+  updateReady: '새 버전을 내려받았습니다. 재시작하면 설치됩니다.',
+  updateUpToDate: '최신 버전입니다.',
+  updateChecking: '업데이트를 확인하는 중입니다.',
+  updateError: (detail: string) => `업데이트를 확인하지 못했습니다: ${detail}`,
+  updateUnsupported: '개발 중이거나 설치되지 않은 실행이라 자동 업데이트를 쓸 수 없습니다.',
+  updateCheck: '업데이트 확인',
+  updateDownload: '내려받기',
+  updateInstall: '재시작하고 설치',
+  settingsTitle: '설정',
+  launchAtLogin: 'Windows 로그인 시 자동 시작',
+  launchAtLoginHint: '켜 두어도 피그마를 실행하거나 플러그인을 붙이지 않습니다. 트레이에서 조용히 시작합니다.',
+  doctorTitle: '점검과 AI 도구',
+  doctorRun: '점검',
+  doctorFix: '고치기',
+  doctorAi: 'AI에게 점검 맡기기',
+  doctorRunning: '점검하는 중…',
+  doctorAllOk: '모든 항목이 정상입니다.',
+  doctorAiRunning: 'AI가 점검하는 중입니다. 몇 분 걸릴 수 있습니다…',
+  doctorAiDone: (harness: string, code: number) => `${harness} 점검이 끝났습니다 (종료 코드 ${code}).`,
+  installTitle: 'AI 도구 설치',
+  install: '설치',
+  login: '로그인',
+  installing: '설치하는 중…',
+  installed: '설치됨',
+  notInstalled: '미설치',
+  statusOk: '정상',
+  statusWarn: '확인 필요',
+  statusFail: '문제',
+  errorPrefix: '오류: ',
+}
+
+export const cliMessages = {
+  relayStartTimeout: '앱을 시작했지만 중계 서버가 응답하지 않았습니다. 3055 포트를 다른 프로그램이 쓰고 있는지 확인하세요.',
+  cleanupFailed: (detail: string) => `연결 항목을 모두 정리하지 못했습니다: ${detail}`,
+}

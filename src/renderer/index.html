@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self'" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>피그마 연결</title>
+  </head>
+  <body>
+    <main id="app">
+      <section id="status" class="card status" data-tone="off" aria-live="polite">
+        <div class="status-row">
+          <span id="dot" class="dot" aria-hidden="true"></span>
+          <div class="status-text">
+            <h1 id="headline"></h1>
+            <p id="detail"></p>
+          </div>
+        </div>
+        <button id="action" class="primary" type="button"></button>
+        <p id="message" class="message" hidden></p>
+      </section>
+
+      <section id="update" class="card update" hidden>
+        <p id="update-text"></p>
+        <button id="update-action" type="button" hidden></button>
+      </section>
+
+      <section class="card">
+        <details id="settings">
+          <summary id="settings-title"></summary>
+          <label class="check">
+            <input id="launch-at-login" type="checkbox" />
+            <span id="launch-at-login-label"></span>
+          </label>
+          <p id="launch-at-login-hint" class="hint"></p>
+          <div class="row">
+            <button id="update-check" type="button"></button>
+            <span id="update-detail" class="hint"></span>
+          </div>
+        </details>
+      </section>
+
+      <section class="card">
+        <details id="tools">
+          <summary id="tools-title"></summary>
+          <div class="row">
+            <button id="doctor-run" type="button"></button>
+            <button id="doctor-fix" type="button"></button>
+            <button id="doctor-ai" type="button"></button>
+          </div>
+          <ul id="doctor-list" class="list"></ul>
+          <pre id="doctor-ai-output" class="output" hidden></pre>
+          <h2 id="install-title"></h2>
+          <ul id="harness-list" class="list"></ul>
+          <p id="harness-note" class="hint" hidden></p>
+        </details>
+      </section>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
