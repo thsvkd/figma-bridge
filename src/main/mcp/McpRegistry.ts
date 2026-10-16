@@ -143,6 +143,11 @@ function removeUnmarked(text: string): string {
     .join('')
 }
 
+function hasUnmarked(text: string): boolean {
+  const { before, after } = splitBlock(text)
+  return removeUnmarked(before) !== before || removeUnmarked(after) !== after
+}
+
 function codexTarget(deps: TargetDeps, ops: ReturnType<typeof fileOps>): HarnessTarget {
   const file = deps.paths.codexConfig
   return {
@@ -152,9 +157,8 @@ function codexTarget(deps: TargetDeps, ops: ReturnType<typeof fileOps>): Harness
     async isRegistered(l) {
       const text = await ops.readText(file)
       if (text === null) return false
-      const { before, block, after } = splitBlock(text)
-      if (block === null) return false
-      if (removeUnmarked(before) !== before || removeUnmarked(after) !== after) return false
+      const { block } = splitBlock(text)
+      if (block === null || hasUnmarked(text)) return false
       return block.replace(/\r\n/g, '\n') === codexBlock(l, '\n')
     },
     async register(l) {
@@ -173,15 +177,33 @@ function codexTarget(deps: TargetDeps, ops: ReturnType<typeof fileOps>): Harness
       await ops.writeText(file, next, text !== null)
     },
     async unregister() {
-      const text = await ops.readText(file)
+      const original = await ops.readText(file)
+      if (original === null) return
+      // Older builds registered through `codex mcp add`, which leaves an unmarked table. Let the CLI try
+      // first; whatever it leaves behind is removed from the file below.
+      const cli = deps.findCommand('codex')
+      if (cli && hasUnmarked(original)) {
+        try {
+          await deps.runCli(cli, ['mcp', 'remove', MCP_NAME])
+        } catch {
+          // Best effort: the file cleanup below does not depend on it.
+        }
+      }
+      const text = cli ? await ops.readText(file) : original
       if (text === null) return
       const { before, block, after } = splitBlock(text)
-      if (block === null) return
-      const eol = text.includes('\r\n') ? '\r\n' : '\n'
-      const rest = [before.trimEnd(), after.replace(/^(?:\r?\n)+/, '')].filter((s) => s.trim())
-      let next = rest.join(eol + eol)
-      if (next && !next.endsWith('\n')) next += eol
-      await ops.writeText(file, next, true)
+      let next: string
+      if (block === null) {
+        next = removeUnmarked(text)
+      } else {
+        const eol = text.includes('\r\n') ? '\r\n' : '\n'
+        const rest = [removeUnmarked(before).trimEnd(), removeUnmarked(after).replace(/^(?:\r?\n)+/, '')].filter((s) =>
+          s.trim(),
+        )
+        next = rest.join(eol + eol)
+        if (next && !next.endsWith('\n')) next += eol
+      }
+      if (next !== text) await ops.writeText(file, next, true)
     },
   }
 }

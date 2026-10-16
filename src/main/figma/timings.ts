@@ -1,5 +1,5 @@
-// Wait limits for driving the Figma desktop app. Values marked "legacy" come from lib/Plugin.ps1,
-// which worked in the field; re-measure them with the Win32 smoke test in docs/manual-checklist.md.
+// Wait limits for driving the Figma desktop app. Values marked "legacy" come from the PowerShell-era app,
+// where they worked in the field; re-measure them with the Win32 smoke test in docs/manual-checklist.md.
 export const timings = {
   /** Poll interval while waiting for the Figma window to become foreground. */
   focusPollMs: 25,

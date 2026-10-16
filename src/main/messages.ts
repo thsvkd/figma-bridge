@@ -85,6 +85,10 @@ export const bridgeMessages = {
   actionFailed: (detail: string) => `작업 중 오류가 났습니다: ${detail}`,
 }
 
+export const systemMessages = {
+  timedOut: (ms: number) => `명령이 ${Math.round(ms / 1000)}초 안에 끝나지 않아 중단했습니다.`,
+}
+
 export const viewMessages = {
   offHeadline: '꺼져 있습니다',
   offDetail: '연동을 누르면 중계 서버를 켜고 피그마 플러그인을 연결합니다.',

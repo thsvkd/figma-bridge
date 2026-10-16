@@ -122,7 +122,9 @@ export class BridgeController {
   private async update(force: boolean): Promise<BridgeState> {
     const switchOn = this.deps.settings.get().switchOn
     const { relay } = this.deps
-    const status: BridgeStatus = !switchOn || !relay.running ? 'off' : relay.status().figmaJoined > 0 ? 'connected' : 'relay-only'
+    // turnOn saves the switch only after attach() returns (up to ~45 s), so an in-flight turnOn counts as on.
+    const on = switchOn || this.inflight.has('turnOn')
+    const status: BridgeStatus = !on || !relay.running ? 'off' : relay.status().figmaJoined > 0 ? 'connected' : 'relay-only'
     const next: BridgeState = {
       switchOn,
       status,

@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { getHarnessCatalog, installHarness, startHarnessLogin, type InstallDeps } from './harnessInstall'
+import {
+  getHarnessCatalog,
+  installHarness,
+  shouldRegisterAfterInstall,
+  startHarnessLogin,
+  type InstallDeps,
+} from './harnessInstall'
 
 interface Run {
   file: string
@@ -165,5 +171,15 @@ describe('startHarnessLogin', () => {
     expect(l.spawned).toHaveLength(0)
     expect(l.opened).toEqual(['https://claude.ai/download'])
     expect(msg).toMatch(/로그인/)
+  })
+})
+
+describe('shouldRegisterAfterInstall', () => {
+  const base = { needsLogin: true, detail: '', manualUrl: '' }
+  it('is true only for a successful fresh install', () => {
+    expect(shouldRegisterAfterInstall({ ...base, ok: true, method: 'winget' })).toBe(true)
+    expect(shouldRegisterAfterInstall({ ...base, ok: true, method: 'script' })).toBe(true)
+    expect(shouldRegisterAfterInstall({ ...base, ok: true, method: 'already' })).toBe(false)
+    expect(shouldRegisterAfterInstall({ ...base, ok: false, method: 'none' })).toBe(false)
   })
 })

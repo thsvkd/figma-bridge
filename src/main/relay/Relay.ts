@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type Server } from 'node:http'
 import { WebSocket, WebSocketServer } from 'ws'
 
-// Port of lib/relay.js: same join / message / progress_update protocol, channel bridging and GET /status.
+// Same join / message / progress_update protocol, channel bridging and GET /status as the PowerShell-era relay.
 
 export interface RelayStatus {
   relay: 'figma-bridge'

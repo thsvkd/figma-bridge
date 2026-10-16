@@ -31,6 +31,7 @@ function setup(opts: { startError?: Error; ensureErrors?: string[]; attachJoins?
   let figmaJoined = 0
   let registered = false
   let startGate: Promise<void> | null = null
+  let attachGate: Promise<void> | null = null
 
   const relay = {
     get running() {
@@ -79,6 +80,7 @@ function setup(opts: { startError?: Error; ensureErrors?: string[]; attachJoins?
   const launcher = {
     async attach(): Promise<LaunchResult> {
       calls.push('launcher.attach')
+      if (attachGate) await attachGate
       if (opts.attachError) throw opts.attachError
       if (figmaJoined > 0) return { outcome: 'already', detail: '이미 연결됨' }
       if (opts.attachOutcome) return opts.attachOutcome
@@ -105,6 +107,14 @@ function setup(opts: { startError?: Error; ensureErrors?: string[]; attachJoins?
     actions: () => calls.filter((c) => c !== 'registry.list'),
     setJoined: (n: number) => {
       figmaJoined = n
+    },
+    gateAttach: () => {
+      let open!: () => void
+      attachGate = new Promise<void>((r) => (open = r))
+      return () => {
+        attachGate = null
+        open()
+      }
     },
     gateStart: () => {
       let open!: () => void
@@ -204,6 +214,41 @@ describe('turnOn', () => {
     const [sa, sb] = await Promise.all([a, b])
     expect(sa).toEqual(sb)
     expect(t.actions()).toEqual(['relay.start', 'registry.ensure', 'launcher.attach'])
+  })
+})
+
+describe('turnOn while attach is pending', () => {
+  const tick = () => new Promise((r) => setTimeout(r, 0))
+
+  it('derives relay-only, not off, from refresh() once the relay runs but the switch is not saved yet', async () => {
+    const t = setup({ attachJoins: false })
+    const open = t.gateAttach()
+    const pending = t.ctl.turnOn()
+    while (!t.calls.includes('launcher.attach')) await tick()
+    expect(settings.get().switchOn).toBe(false)
+    const mid = await t.ctl.refresh()
+    expect(mid).toMatchObject({ status: 'relay-only', busy: true })
+    t.setJoined(1)
+    expect((await t.ctl.refresh()).status).toBe('connected')
+    open()
+    expect(await pending).toMatchObject({ switchOn: true, busy: false })
+  })
+
+  it('stays off while the relay is not running yet', async () => {
+    const t = setup()
+    const open = t.gateStart()
+    const pending = t.ctl.turnOn()
+    expect((await t.ctl.refresh()).status).toBe('off')
+    open()
+    await pending
+  })
+
+  it('leaves the switch false and the state off when the port is taken', async () => {
+    const t = setup({ startError: new PortInUseError(3055) })
+    const s = await t.ctl.turnOn()
+    expect(s).toMatchObject({ status: 'off', switchOn: false, busy: false })
+    expect((await t.ctl.refresh()).status).toBe('off')
+    expect(settings.get().switchOn).toBe(false)
   })
 })
 

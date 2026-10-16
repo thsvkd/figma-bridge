@@ -1,7 +1,7 @@
 import type { HarnessId } from '@shared/types'
 import { harnessInstallMessages as m } from '../messages'
 
-// Behavioral port of lib/HarnessInstall.ps1: winget first (no admin needed), then the official script.
+// Same order as the PowerShell-era installer: winget first (no admin needed), then the official script.
 // The script is downloaded to a file and run with -NoProfile -ExecutionPolicy Bypass -File so that
 // profiles and execution policy cannot break it and failures point at a real line.
 
@@ -108,6 +108,11 @@ async function viaScript(e: HarnessCatalogEntry, deps: InstallDeps): Promise<boo
   } finally {
     await downloaded.cleanup().catch(() => undefined)
   }
+}
+
+/** A tool that was just installed needs its MCP entry now, not only on the next connect. */
+export function shouldRegisterAfterInstall(r: InstallResult): boolean {
+  return r.ok && r.method !== 'already'
 }
 
 export async function installHarness(id: HarnessId, deps: InstallDeps): Promise<InstallResult> {

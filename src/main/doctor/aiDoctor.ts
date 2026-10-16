@@ -30,7 +30,7 @@ export interface AiDoctorResult {
   after: DoctorResult
 }
 
-// Same three rules as Protect-FbSecretText in the legacy lib/Doctor.ps1.
+// Masks bearer tokens, secret-looking JSON fields and sk- API keys, the same rules the PowerShell-era doctor used.
 export function maskSecrets(text: string): string {
   if (!text) return text
   return text

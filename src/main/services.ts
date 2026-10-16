@@ -3,22 +3,27 @@ import { appendFileSync, mkdirSync } from 'node:fs'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { get } from 'node:http'
 import { dirname, join } from 'node:path'
+import { setTimeout as sleep } from 'node:timers/promises'
 import type { AiDoctorReport, HarnessId, HarnessInstallReport } from '@shared/types'
 import { BridgeController } from './bridge/BridgeController'
 import { Doctor, type DoctorResult } from './doctor/Doctor'
 import { runAiDoctor } from './doctor/aiDoctor'
-import { installHarness, startHarnessLogin } from './doctor/harnessInstall'
+import { installHarness, shouldRegisterAfterInstall, startHarnessLogin } from './doctor/harnessInstall'
 import { findFigmaPath, listFigmaPids, createWin32FigmaDriver } from './figma/win32'
 import { PluginLauncher } from './figma/PluginLauncher'
 import { buildLaunch, type McpLaunch } from './mcp/launch'
 import { createTargets, McpRegistry } from './mcp/McpRegistry'
 import { createPaths } from './paths'
 import { Relay, type RelayStatus } from './relay/Relay'
+import { listeningPids, startWithLegacyCleanup, stopLegacyRelay } from './relay/legacyRelay'
 import { SettingsStore } from './settings'
 import { createFindCommand, createHarnessFinder, download, runCli, runProcess, spawnVisible } from './system'
 
 export const RELAY_PORT = 3055
 export const PLUGIN_NAME = 'Talk To Figma MCP Plugin'
+// The AI doctor and the winget/script installs legitimately run for minutes; everything else keeps the 30 s default.
+const AI_DOCTOR_TIMEOUT_MS = 15 * 60_000
+const INSTALL_TIMEOUT_MS = 10 * 60_000
 export const PLUGIN_URL = 'https://www.figma.com/community/plugin/1485687494525374295/talk-to-figma-mcp-plugin'
 
 export interface ServiceOptions {
@@ -66,6 +71,35 @@ export function createServices(opts: ServiceOptions) {
   const relay = new Relay({ port: RELAY_PORT, log })
   const relayStatus = (): RelayStatus | null => (relay.running ? relay.status() : null)
 
+  const stopLegacy = () =>
+    stopLegacyRelay({
+      port: RELAY_PORT,
+      home: paths.home,
+      fetchStatus: fetchRelayStatus,
+      readPidFile: (file) => readFile(file, 'utf8').catch(() => null),
+      imageNameOf: async (pid) => {
+        const out = (await runProcess('tasklist.exe', ['/FI', `PID eq ${pid}`, '/FO', 'CSV', '/NH'])).stdout
+        const row = /^"([^"]+)","(\d+)"/m.exec(out)
+        return row && Number(row[2]) === pid ? row[1] : null
+      },
+      listenerPids: async (port) => listeningPids((await runProcess('netstat.exe', ['-ano', '-p', 'TCP'])).stdout, port),
+      kill: async (pid) => void process.kill(pid),
+      currentPid: process.pid,
+      sleep: (ms) => sleep(ms),
+    }).then((stopped) => {
+      if (stopped) log('Stopped a relay left over from the previous app version')
+      return stopped
+    })
+  // The bridge starts the relay through this wrapper so a leftover relay from the old app cannot block it.
+  const bridgeRelay = {
+    start: () => startWithLegacyCleanup(() => relay.start(), stopLegacy),
+    stop: () => relay.stop(),
+    status: () => relay.status(),
+    get running() {
+      return relay.running
+    },
+  }
+
   const findCommand = createFindCommand()
   const findHarness = createHarnessFinder(paths, findCommand)
   const registry = new McpRegistry(createTargets({ paths, runCli, findCommand }))
@@ -86,7 +120,7 @@ export function createServices(opts: ServiceOptions) {
 
   const bridge = (emit: ConstructorParameters<typeof BridgeController>[0]['emit']) =>
     new BridgeController({
-      relay,
+      relay: bridgeRelay,
       registry,
       launch,
       launcher,
@@ -102,12 +136,14 @@ export function createServices(opts: ServiceOptions) {
 
   const installDeps = {
     findCommand: findHarness,
-    runProcess: async (file: string, args: string[]) => ({ code: (await runProcess(file, args)).code }),
+    runProcess: async (file: string, args: string[]) => ({ code: (await runProcess(file, args, { timeoutMs: INSTALL_TIMEOUT_MS })).code }),
     download,
   }
 
   const installAndReport = async (id: HarnessId): Promise<HarnessInstallReport> => {
     const r = await installHarness(id, installDeps)
+    // Registration errors surface in the harness list; the install itself still succeeded.
+    if (shouldRegisterAfterInstall(r)) await registry.ensure(launch())
     return { ok: r.ok, detail: r.detail, manualUrl: r.manualUrl, needsLogin: r.needsLogin }
   }
 
@@ -130,7 +166,7 @@ export function createServices(opts: ServiceOptions) {
     const before: DoctorResult = await doctor.run({ fix: true, figmaInput: false })
     const r = await runAiDoctor(before, {
       findCommand,
-      runProcess: (file, args, o) => runProcess(file, args, o),
+      runProcess: (file, args, o) => runProcess(file, args, { ...o, timeoutMs: AI_DOCTOR_TIMEOUT_MS }),
       writeFile: async (file, text) => {
         await mkdir(dirname(file), { recursive: true })
         await writeFile(file, text)

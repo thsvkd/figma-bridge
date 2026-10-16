@@ -355,6 +355,49 @@ describe('Codex target', () => {
     expect(await target('codex').isRegistered(launch)).toBe(false)
   })
 
+  const legacyTable =
+    '[mcp_servers.TalkToFigma]\ncommand = "bun"\nargs = ["x"]\n\n[mcp_servers.TalkToFigma.env]\nA = "1"\n\n'
+  const otherServer = '[mcp_servers.another]\ncommand = "another.exe"\n'
+
+  it('unregister removes an unmarked TalkToFigma table and keeps other servers byte-identical', async () => {
+    write(paths.codexConfig, 'model = "o3"\n\n' + legacyTable + otherServer)
+    await target('codex').unregister()
+    expect(readFileSync(paths.codexConfig, 'utf8')).toBe('model = "o3"\n\n' + otherServer)
+    expect(cliCalls).toEqual([{ file: 'C:\\bin\\codex.cmd', args: ['mcp', 'remove', 'TalkToFigma'] }])
+  })
+
+  it('unregister removes marked and unmarked tables together', async () => {
+    write(paths.codexConfig, outside)
+    await target('codex').register(launch)
+    write(paths.codexConfig, readFileSync(paths.codexConfig, 'utf8') + '\n' + legacyTable + otherServer)
+    await target('codex').unregister()
+    const text = readFileSync(paths.codexConfig, 'utf8')
+    expect(text).not.toContain('TalkToFigma')
+    expect(text).toContain(otherServer)
+    expect(text.startsWith(outside.trimEnd())).toBe(true)
+  })
+
+  it('unregister ignores a failing codex CLI', async () => {
+    cliResult = () => {
+      throw new Error('boom')
+    }
+    write(paths.codexConfig, legacyTable + otherServer)
+    await target('codex').unregister()
+    expect(readFileSync(paths.codexConfig, 'utf8')).toBe(otherServer)
+  })
+
+  it('a second unregister is a no-op', async () => {
+    write(paths.codexConfig, 'model = "o3"\n\n' + legacyTable + otherServer)
+    await target('codex').unregister()
+    const after = readFileSync(paths.codexConfig, 'utf8')
+    const backupCount = backups().length
+    cliCalls = []
+    await target('codex').unregister()
+    expect(readFileSync(paths.codexConfig, 'utf8')).toBe(after)
+    expect(backups()).toHaveLength(backupCount)
+    expect(cliCalls).toEqual([])
+  })
+
   it('unregister works even when codex is no longer installed', async () => {
     await target('codex').register(launch)
     commands.codex = null

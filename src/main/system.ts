@@ -4,6 +4,7 @@ import { rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { delimiter, join, win32 } from 'node:path'
 import type { HarnessId } from '@shared/types'
+import { systemMessages } from './messages'
 import type { Paths } from './paths'
 
 // Real OS boundaries (processes, PATH lookup, downloads) shared by the GUI and the headless CLI modes.
@@ -14,10 +15,12 @@ export interface ProcessResult {
   stderr: string
 }
 
+const DEFAULT_TIMEOUT_MS = 30_000
+
 export function runProcess(
   file: string,
   args: string[],
-  opts: { cwd?: string; stdin?: string } = {},
+  opts: { cwd?: string; stdin?: string; timeoutMs?: number } = {},
 ): Promise<ProcessResult> {
   return new Promise((resolve, reject) => {
     const child = spawn(file, args, { cwd: opts.cwd, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] })
@@ -25,18 +28,28 @@ export function runProcess(
     let stderr = ''
     child.stdout.setEncoding('utf8').on('data', (d: string) => (stdout += d))
     child.stderr.setEncoding('utf8').on('data', (d: string) => (stderr += d))
-    child.once('error', reject)
-    child.once('close', (code) => resolve({ code: code ?? 1, stdout, stderr }))
+    const timer = setTimeout(() => {
+      child.kill()
+      reject(new Error(systemMessages.timedOut(opts.timeoutMs ?? DEFAULT_TIMEOUT_MS)))
+    }, opts.timeoutMs ?? DEFAULT_TIMEOUT_MS)
+    child.once('error', (e) => {
+      clearTimeout(timer)
+      reject(e)
+    })
+    child.once('close', (code) => {
+      clearTimeout(timer)
+      resolve({ code: code ?? 1, stdout, stderr })
+    })
     child.stdin.on('error', () => undefined) // the child may exit before reading its stdin
     child.stdin.end(opts.stdin ?? '')
   })
 }
 
 // .cmd/.ps1 npm shims cannot be spawned directly (EINVAL since CVE-2024-27980), so run the sibling .ps1.
-export function runCli(file: string, args: string[]): Promise<ProcessResult> {
-  if (!/\.(cmd|ps1)$/i.test(file)) return runProcess(file, args)
+export function runCli(file: string, args: string[], opts: { timeoutMs?: number } = {}): Promise<ProcessResult> {
+  if (!/\.(cmd|ps1)$/i.test(file)) return runProcess(file, args, opts)
   const script = file.replace(/\.cmd$/i, '.ps1')
-  return runProcess('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script, ...args])
+  return runProcess('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script, ...args], opts)
 }
 
 function expandEnv(value: string, env: NodeJS.ProcessEnv): string {
@@ -59,26 +72,34 @@ function registryPath(env: NodeJS.ProcessEnv): string[] {
 
 const EXTENSIONS = ['.exe', '.cmd', '.ps1']
 
-function searchDirs(dirs: string[], name: string): string | null {
+function searchDirs(dirs: string[], name: string, exists: (p: string) => boolean): string | null {
   for (const dir of dirs) {
     for (const ext of EXTENSIONS) {
       const candidate = win32.join(dir, name + ext)
-      if (existsSync(candidate)) return candidate
+      if (exists(candidate)) return candidate
     }
   }
   return null
 }
 
-export function createFindCommand(env: NodeJS.ProcessEnv = process.env) {
-  const known = [
-    win32.join(env.USERPROFILE ?? '', '.local', 'bin'),
-    win32.join(env.LOCALAPPDATA ?? '', 'Microsoft', 'WinGet', 'Links'),
-    win32.join(env.APPDATA ?? '', 'npm'),
-  ]
+export function createFindCommand(env: NodeJS.ProcessEnv = process.env, exists: (p: string) => boolean = existsSync) {
+  const profile = env.USERPROFILE ?? ''
+  const local = env.LOCALAPPDATA ?? ''
+  const winget = win32.join(local, 'Microsoft', 'WinGet', 'Links')
+  // Native installers, winget and npm put the tools here even when the PATH this process got is stale.
+  const known: Record<'claude' | 'codex', string[]> = {
+    claude: [win32.join(profile, '.local', 'bin', 'claude.exe'), win32.join(winget, 'claude.exe')],
+    codex: [
+      win32.join(env.APPDATA ?? '', 'npm', 'codex.cmd'),
+      win32.join(local, 'Programs', 'OpenAI', 'Codex', 'bin', 'codex.exe'),
+      win32.join(profile, '.codex', 'packages', 'standalone', 'current', 'bin', 'codex.exe'),
+      win32.join(winget, 'codex.exe'),
+    ],
+  }
   return (name: 'claude' | 'codex'): string | null =>
-    searchDirs(known, name) ??
-    searchDirs((env.PATH ?? env.Path ?? '').split(delimiter).filter(Boolean), name) ??
-    searchDirs(registryPath(env).filter(Boolean), name)
+    searchDirs((env.PATH ?? env.Path ?? '').split(delimiter).filter(Boolean), name, exists) ??
+    known[name].find(exists) ??
+    searchDirs(registryPath(env).filter(Boolean), name, exists)
 }
 
 export function createHarnessFinder(paths: Paths, findCommand: (name: 'claude' | 'codex') => string | null) {
