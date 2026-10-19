@@ -8,14 +8,16 @@ const COLORS: Record<BridgeStatus, [number, number, number]> = {
   connected: [34, 197, 94],
 }
 
-// A filled dot drawn into a BGRA bitmap, so the three states need no image files.
+// Two interlocked rings (like the app icon) drawn into a BGRA bitmap, so the three states need no
+// image files. A ring pair rather than a filled dot, so it isn't mistaken for other tray apps.
 function dotIcon(rgb: [number, number, number]) {
   const size = 32
   const buf = Buffer.alloc(size * size * 4)
   const c = (size - 1) / 2
+  const ring = (d: number) => Math.max(0, Math.min(1, 2.25 - Math.abs(d - 6.75)))
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
-      const alpha = Math.max(0, Math.min(1, 14.5 - Math.hypot(x - c, y - c)))
+      const alpha = Math.max(ring(Math.hypot(x - (c - 6), y - c)), ring(Math.hypot(x - (c + 6), y - c)))
       const o = (y * size + x) * 4
       buf[o] = rgb[2]
       buf[o + 1] = rgb[1]
