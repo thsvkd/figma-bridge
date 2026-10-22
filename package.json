@@ -1,6 +1,6 @@
 {
   "name": "figma-bridge",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Talk to Figma MCP bridge for designers and developers",
   "private": true,
   "author": "thsvkd",
@@ -11,7 +11,8 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "build:win": "npm run build && electron-builder --win --x64",
-    "smoke:packaged": "node script/smoke-packaged.mjs"
+    "smoke:packaged": "node script/smoke-packaged.mjs",
+    "smoke:mcp-packaged": "node script/smoke-mcp-packaged.mjs"
   },
   "dependencies": {
     "cursor-talk-to-figma-mcp": "0.3.5",

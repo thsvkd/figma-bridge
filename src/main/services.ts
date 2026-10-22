@@ -104,11 +104,8 @@ export function createServices(opts: ServiceOptions) {
   const findHarness = createHarnessFinder(paths, findCommand)
   const registry = new McpRegistry(createTargets({ paths, runCli, findCommand }))
   const launch = (): McpLaunch => {
-    const l = buildLaunch({ exePath: opts.exePath, resourcesPath: opts.resourcesPath })
-    // In dev the MCP package is not unpacked next to the electron binary, so point at node_modules.
-    return opts.isPackaged
-      ? l
-      : { ...l, args: [join(opts.appPath, 'node_modules', 'cursor-talk-to-figma-mcp', 'dist', 'server.js')] }
+    const l = buildLaunch(opts)
+    return opts.isPackaged ? l : { ...l, args: [opts.appPath, ...l.args] }
   }
 
   const driver = createWin32FigmaDriver({

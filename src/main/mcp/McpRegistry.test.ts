@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { HarnessId } from '@shared/types'
 import { createPaths, type Paths } from '../paths'
-import type { McpLaunch } from './launch'
+import { buildLaunch, type McpLaunch } from './launch'
 import { createTargets, McpRegistry, type HarnessTarget } from './McpRegistry'
 
 const HANGUL = /[\uAC00-\uD7A3]/
@@ -145,6 +145,33 @@ describe('McpRegistry', () => {
 describe('createTargets', () => {
   it('returns Claude Code, Claude Desktop and Codex', () => {
     expect(targets().map((t) => t.id)).toEqual(['claude', 'claude-desktop', 'codex'])
+  })
+
+  it('migrates existing Codex and Claude Desktop node-mode registrations once, preserving other settings', async () => {
+    const desktop = target('claude-desktop')
+    const codex = target('codex')
+    write(paths.claudeDesktopConfig, JSON.stringify({ theme: 'dark', mcpServers: { other: { command: 'other' } } }))
+    write(paths.codexConfig, 'model = "keep-me"\n')
+    await desktop.register(launch)
+    await codex.register(launch)
+    const next = buildLaunch({ exePath: launch.command })
+    const registry = new McpRegistry([desktop, codex])
+    expect(await registry.ensure(next)).toEqual([
+      { id: 'claude-desktop', changed: true }, { id: 'codex', changed: true },
+    ])
+    expect(JSON.parse(readFileSync(paths.claudeDesktopConfig, 'utf8'))).toEqual({
+      theme: 'dark', mcpServers: { other: { command: 'other' }, TalkToFigma: {
+        command: launch.command, args: ['--mcp'], env: {},
+      } },
+    })
+    const toml = readFileSync(paths.codexConfig, 'utf8')
+    expect(toml).toContain('model = "keep-me"')
+    expect(toml).toContain('args = ["--mcp"]')
+    expect(toml).not.toContain('ELECTRON_RUN_AS_NODE')
+    expect(toml.match(/\[mcp_servers.TalkToFigma\]/g)).toHaveLength(1)
+    expect(await registry.ensure(next)).toEqual([
+      { id: 'claude-desktop', changed: false }, { id: 'codex', changed: false },
+    ])
   })
 })
 

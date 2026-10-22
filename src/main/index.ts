@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process'
+import { join } from 'node:path'
 import { app, shell } from 'electron'
 import { autoUpdater } from 'electron-updater'
 import { IPC, type DoctorReport } from '@shared/types'
@@ -11,7 +12,6 @@ import { isAutomaticUpdateSupported, UpdateManager, type UpdateClient } from './
 import { createWindowController } from './window'
 
 const cli = parseCliArgs(process.argv.slice(1))
-app.setAppUserModelId('com.figma-bridge.app')
 
 const makeServices = () =>
   createServices({
@@ -93,7 +93,7 @@ async function cleanup(s: Services): Promise<void> {
   }
 }
 
-function runHeadless(mode: Exclude<CliArgs['mode'], 'gui'>): void {
+function runHeadless(mode: Exclude<CliArgs['mode'], 'gui' | 'mcp'>): void {
   const s = makeServices()
   const job = mode === 'status' ? printStatus(s) : mode === 'doctor-fix' ? doctorFix(s) : cleanup(s)
   job.catch((e: unknown) => finish(e instanceof Error ? e.message : String(e), 1, process.stderr))
@@ -102,6 +102,7 @@ function runHeadless(mode: Exclude<CliArgs['mode'], 'gui'>): void {
 // ---- GUI ----
 
 function runGui(args: CliArgs): void {
+  app.setAppUserModelId('com.figma-bridge.app')
   if (!app.requestSingleInstanceLock()) {
     app.exit(0)
     return
@@ -173,7 +174,9 @@ function runGui(args: CliArgs): void {
     })
 
     app.on('second-instance', (_event, argv) => {
-      if (!parseCliArgs(argv.slice(1)).hidden) win.show()
+      const incoming = parseCliArgs(argv.slice(1))
+      if (incoming.mode !== 'gui') return
+      if (!incoming.hidden) win.show()
       void bridge.restore()
     })
     app.on('before-quit', () => {
@@ -200,5 +203,20 @@ function runGui(args: CliArgs): void {
   })
 }
 
-if (cli.mode === 'gui') runGui(cli)
+if (cli.mode === 'mcp') {
+  // Do not enter GUI initialization or acquire its single-instance lock. Set
+  // Node mode ourselves: client launchers do not reliably forward registered env.
+  const root = app.isPackaged ? join(process.resourcesPath, 'app.asar.unpacked') : app.getAppPath()
+  const server = join(root, 'resources', 'mcp-stdio.cjs')
+  const modeIndex = process.argv.findIndex((arg) => arg === '--mcp' || /[\\/]cursor-talk-to-figma-mcp[\\/]dist[\\/]server\.js$/i.test(arg))
+  // Electron's browser process does not expose a usable stdin on Windows. Pass
+  // the original handles directly to the Node child rather than reading/piping.
+  const child = spawn(process.execPath, [server, ...process.argv.slice(modeIndex + 1)], {
+    env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+    stdio: 'inherit',
+    windowsHide: true,
+  })
+  child.once('error', (e) => finish(e.message, 1, process.stderr))
+  child.once('exit', (code) => app.exit(code ?? 1))
+} else if (cli.mode === 'gui') runGui(cli)
 else runHeadless(cli.mode)

@@ -14,7 +14,7 @@ files:
   - package.json
 asarUnpack:
   - resources/**
-  # The MCP server runs as `ELECTRON_RUN_AS_NODE=1 <app exe> <server.js>` from a real path and imports its
+  # `<app exe> --mcp` starts a Node-mode child from a real path, which imports its
   # dependencies (@modelcontextprotocol/sdk, zod, ws, uuid, express...) by plain Node resolution, which does
   # not look inside app.asar from app.asar.unpacked. Native koffi sits in the @koromix/koffi-* packages.
   # So every production dependency is unpacked; the asar keeps only the bundles.
@@ -35,3 +35,6 @@ nsis:
   differentialPackage: true
   include: build/installer.nsh
 npmRebuild: false
+# --mcp sets ELECTRON_RUN_AS_NODE on its own child, independently of the client.
+electronFuses:
+  runAsNode: true
