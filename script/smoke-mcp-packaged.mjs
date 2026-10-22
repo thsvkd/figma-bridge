@@ -122,7 +122,12 @@ async function quiet(label, action) {
   const sample = () => {
     for (const window of bridgeWindows()) {
       if (initialWindows.has(window.hwnd)) continue
-      if (window.visible || window.hwnd === foreground()) unexpected.add(JSON.stringify(window))
+      // A noninteractive Windows runner can retain a hidden window as the
+      // foreground handle. Only a change from the pre-connection handle is an
+      // activation; becoming visible is always a failure.
+      if (window.visible || (window.hwnd === foreground() && window.hwnd !== startFocus)) {
+        unexpected.add(JSON.stringify(window))
+      }
     }
   }
   const timer = setInterval(sample, 10)
@@ -131,8 +136,9 @@ async function quiet(label, action) {
     await sleep(300)
     sample()
     assert.deepEqual([...unexpected], [], `${label}: unexpected window/activation`)
-    assert.equal(foreground(), startFocus, `${label}: foreground changed`)
-    console.log(`[mcp-smoke] PASS ${label}: no window/activation`)
+    // The user can work in other apps during the test. Those focus changes are
+    // unrelated; the samples above reject activation of the bridge itself.
+    console.log(`[mcp-smoke] PASS ${label}: no bridge window/activation`)
   } finally { clearInterval(timer) }
 }
 
